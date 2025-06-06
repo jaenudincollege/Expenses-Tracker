@@ -4,6 +4,7 @@ import { incomeService } from "../services/api";
 import Pagination from "../components/Pagination";
 import LoadingSpinner from "../components/LoadingSpinner";
 import usePagination from "../hooks/usePagination";
+import notify from "../utils/toast";
 
 const IncomesPage = () => {
   const [incomes, setIncomes] = useState([]);
@@ -34,6 +35,24 @@ const IncomesPage = () => {
 
     fetchIncomes();
   }, []);
+  const handleDownloadCsv = async () => {
+    try {
+      setLoading(true);
+      const loadingToastId = notify.loading(
+        "Preparing incomes CSV download..."
+      );
+      await incomeService.downloadCSV();
+      notify.dismiss(loadingToastId);
+      notify.success("Incomes CSV downloaded successfully");
+      // The download will be handled by the browser automatically
+    } catch (err) {
+      setError("Failed to download incomes CSV");
+      notify.error("Failed to download incomes CSV");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (loading)
     return (
@@ -53,24 +72,45 @@ const IncomesPage = () => {
     <div>
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-800">Income Management</h1>
-        <Link
-          to="/incomes/new"
-          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition-colors flex items-center"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            className="h-5 w-5 mr-1"
-            viewBox="0 0 20 20"
-            fill="currentColor"
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={handleDownloadCsv}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition-colors flex items-center"
+            disabled={loading || incomes.length === 0}
           >
-            <path
-              fillRule="evenodd"
-              d="M10 3a1 1 0 00-1 1v5H4a1 1 0 100 2h5v5a1 1 0 102 0v-5h5a1 1 0 100-2h-5V4a1 1 0 00-1-1z"
-              clipRule="evenodd"
-            />
-          </svg>
-          Add New Income
-        </Link>
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5 mr-1"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"
+                clipRule="evenodd"
+              />
+            </svg>
+            Download CSV
+          </button>
+          <Link
+            to="/incomes/new"
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition-colors flex items-center"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5 mr-1"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M10 3a1 1 0 00-1 1v5H4a1 1 0 100 2h5v5a1 1 0 102 0v-5h5a1 1 0 100-2h-5V4a1 1 0 00-1-1z"
+                clipRule="evenodd"
+              />
+            </svg>
+            Add New Income
+          </Link>
+        </div>
       </div>
 
       {paginatedIncomes.length === 0 ? (

@@ -6,7 +6,7 @@ import Navbar from "./components/Navbar";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import Dashboard from "./pages/DashboardNew";
+import Dashboard from "./pages/Dashboard";
 import Analytics from "./pages/Analytics";
 import ExpensesPage from "./pages/ExpensesPage";
 import ExpenseForm from "./pages/ExpenseForm";

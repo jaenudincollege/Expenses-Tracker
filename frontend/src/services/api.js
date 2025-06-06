@@ -39,8 +39,26 @@ export const expenseService = {
   update: (id, expense) => api.patch(`/expenses/${id}`, expense),
   delete: (id) => api.delete(`/expenses/${id}`),
   getHistory: (days) => api.get(`/expenses/history/${days}`),
-  downloadCSV: () =>
-    api.get("/expenses/download/csv", { responseType: "blob" }),
+  downloadCSV: async () => {
+    const response = await api.get("/expenses/download/csv", {
+      responseType: "blob",
+    });
+    // Create blob link to download
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute(
+      "download",
+      `expenses_${new Date().toISOString().split("T")[0]}.csv`
+    );
+    // Append to html link element page
+    document.body.appendChild(link);
+    // Start download
+    link.click();
+    // Clean up and remove the link
+    link.parentNode.removeChild(link);
+    return response;
+  },
 };
 
 // Income services
@@ -51,15 +69,52 @@ export const incomeService = {
   update: (id, income) => api.patch(`/incomes/${id}`, income),
   delete: (id) => api.delete(`/incomes/${id}`),
   getHistory: (days) => api.get(`/incomes/history/${days}`),
-  downloadCSV: () => api.get("/incomes/download/csv", { responseType: "blob" }),
+  downloadCSV: async () => {
+    const response = await api.get("/incomes/download/csv", {
+      responseType: "blob",
+    });
+    // Create blob link to download
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute(
+      "download",
+      `incomes_${new Date().toISOString().split("T")[0]}.csv`
+    );
+    // Append to html link element page
+    document.body.appendChild(link);
+    // Start download
+    link.click();
+    // Clean up and remove the link
+    link.parentNode.removeChild(link);
+    return response;
+  },
 };
 
 // Transaction services
 export const transactionService = {
   getAll: () => api.get("/transactions"),
   getHistory: (days) => api.get(`/transactions/history/${days}`),
-  downloadCSV: () =>
-    api.get("/transactions/download/csv", { responseType: "blob" }),
+  downloadCSV: async () => {
+    const response = await api.get("/transactions/download/csv", {
+      responseType: "blob",
+    });
+    // Create blob link to download
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute(
+      "download",
+      `transactions_${new Date().toISOString().split("T")[0]}.csv`
+    );
+    // Append to html link element page
+    document.body.appendChild(link);
+    // Start download
+    link.click();
+    // Clean up and remove the link
+    link.parentNode.removeChild(link);
+    return response;
+  },
 };
 
 export default api;

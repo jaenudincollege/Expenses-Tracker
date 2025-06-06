@@ -1,0 +1,207 @@
+import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { incomeService } from "../services/api";
+import Pagination from "../components/Pagination";
+import LoadingSpinner from "../components/LoadingSpinner";
+import usePagination from "../hooks/usePagination";
+
+const IncomesPage = () => {
+  const [incomes, setIncomes] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // Use pagination hook for incomes
+  const {
+    paginatedData: paginatedIncomes,
+    currentPage: incomesCurrentPage,
+    totalPages: incomesTotalPages,
+    handlePageChange: handleIncomesPageChange,
+  } = usePagination(incomes || [], 10);
+
+  useEffect(() => {
+    const fetchIncomes = async () => {
+      try {
+        setLoading(true);
+        const response = await incomeService.getAll();
+        setIncomes(response.data?.incomes || response.data);
+      } catch (err) {
+        setError("Failed to load incomes");
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchIncomes();
+  }, []);
+
+  if (loading)
+    return (
+      <div className="min-h-full flex items-center justify-center">
+        <LoadingSpinner size="large" message="Loading income data..." />
+      </div>
+    );
+
+  if (error)
+    return (
+      <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded">
+        <p>{error}</p>
+      </div>
+    );
+
+  return (
+    <div>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-2xl font-bold text-gray-800">Income Management</h1>
+        <Link
+          to="/incomes/new"
+          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition-colors flex items-center"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-5 w-5 mr-1"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+          >
+            <path
+              fillRule="evenodd"
+              d="M10 3a1 1 0 00-1 1v5H4a1 1 0 100 2h5v5a1 1 0 102 0v-5h5a1 1 0 100-2h-5V4a1 1 0 00-1-1z"
+              clipRule="evenodd"
+            />
+          </svg>
+          Add New Income
+        </Link>
+      </div>
+
+      {paginatedIncomes.length === 0 ? (
+        <div className="bg-white shadow-md rounded-lg p-6 flex flex-col items-center justify-center text-center">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            className="h-12 w-12 text-gray-400 mb-4"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08-.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+            />
+          </svg>
+          <h2 className="text-xl font-semibold text-gray-700 mb-2">
+            No Income Records Found
+          </h2>
+          <p className="text-gray-500 mb-4">
+            Start tracking your income by adding your first record.
+          </p>
+          <Link
+            to="/incomes/new"
+            className="inline-flex items-center justify-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-5 w-5 mr-2"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M10 3a1 1 0 00-1 1v5H4a1 1 0 100 2h5v5a1 1 0 102 0v-5h5a1 1 0 100-2h-5V4a1 1 0 00-1-1z"
+                clipRule="evenodd"
+              />
+            </svg>
+            Add Your First Income
+          </Link>
+        </div>
+      ) : (
+        <>
+          <div className="bg-white shadow-md rounded-lg overflow-hidden">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Date
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Title
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Category
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Amount
+                  </th>
+                  <th
+                    scope="col"
+                    className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider"
+                  >
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {paginatedIncomes.map((income) => (
+                  <tr key={income.id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {new Date(income.date).toLocaleDateString()}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-medium text-gray-900">
+                        {income.title}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                        {income.category}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
+                      +${parseFloat(income.amount).toFixed(2)}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <Link
+                        to={`/incomes/${income.id}`}
+                        className="text-blue-600 hover:text-blue-900 mr-4"
+                      >
+                        View
+                      </Link>
+                      <Link
+                        to={`/incomes/edit/${income.id}`}
+                        className="text-indigo-600 hover:text-indigo-900"
+                      >
+                        Edit
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {incomesTotalPages > 1 && (
+            <Pagination
+              currentPage={incomesCurrentPage}
+              totalPages={incomesTotalPages}
+              onPageChange={handleIncomesPageChange}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+};
+
+export default IncomesPage;

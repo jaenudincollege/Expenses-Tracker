@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   expenseService,
@@ -10,32 +10,29 @@ import DashboardSummary from "../components/DashboardSummary";
 import Pagination from "../components/Pagination";
 import LoadingSpinner from "../components/LoadingSpinner";
 import usePagination from "../hooks/usePagination";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
 
 const Dashboard = () => {
-  const { currentUser, logout } = useAuth();
+  const { currentUser } = useAuth();
   const [expenses, setExpenses] = useState([]);
   const [incomes, setIncomes] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [periodFilter, setPeriodFilter] = useState(30); // Default to 30 days
 
-  // Use pagination hook for expenses
-  const {
-    paginatedData: paginatedExpenses,
-    currentPage: expensesCurrentPage,
-    totalPages: expensesTotalPages,
-    handlePageChange: handleExpensesPageChange,
-  } = usePagination(expenses?.expenses || [], 5);
-
-  // Use pagination hook for incomes
-  const {
-    paginatedData: paginatedIncomes,
-    currentPage: incomesCurrentPage,
-    totalPages: incomesTotalPages,
-    handlePageChange: handleIncomesPageChange,
-  } = usePagination(incomes?.incomes || [], 5);
-
-  // Use pagination hook for transactions
+  // Use pagination hook for transactions only (no need to show expenses and incomes tables on dashboard)
   const {
     paginatedData: paginatedTransactions,
     currentPage: transactionsCurrentPage,

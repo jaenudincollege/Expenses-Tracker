@@ -66,16 +66,14 @@ const IncomeDetail = () => {
         <div className="detail-row">
           <strong>Description:</strong>
           <span>{income.description || "No description provided"}</span>
-        </div>
-
+        </div>{" "}
         <div className="detail-actions">
           <button onClick={() => navigate(`/incomes/edit/${id}`)}>Edit</button>
           <button onClick={handleDelete} className="delete-btn">
             Delete
           </button>
-          <button onClick={() => navigate("/dashboard")}>
-            Back to Dashboard
-          </button>
+          <button onClick={() => navigate(-1)}>Back</button>
+          <button onClick={() => navigate("/dashboard")}>Dashboard</button>
         </div>
       </div>
     </div>

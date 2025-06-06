@@ -48,11 +48,11 @@ const ExpenseForm = () => {
             ? -Math.abs(parseFloat(data.amount))
             : parseFloat(data.amount),
       };
-
       if (isEditMode) {
         const response = await expenseService.update(id, formattedData);
         toast.success("Expense updated successfully!");
-        navigate("/dashboard");
+        // Use navigate(-1) to go back to previous page
+        navigate(-1);
         return response;
       } else {
         const response = await expenseService.create(formattedData);
@@ -221,9 +221,10 @@ const ExpenseForm = () => {
           </div>
 
           <div className="flex items-center justify-between">
+            {" "}
             <button
               type="button"
-              onClick={() => navigate("/dashboard")}
+              onClick={() => navigate(-1)}
               className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors"
             >
               Cancel

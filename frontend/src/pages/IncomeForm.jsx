@@ -46,7 +46,8 @@ const IncomeForm = () => {
       if (isEditMode) {
         const response = await incomeService.update(id, data);
         toast.success("Income updated successfully!");
-        navigate("/dashboard");
+        // Use navigate(-1) to go back to previous page
+        navigate(-1);
         return response;
       } else {
         const response = await incomeService.create(data);
@@ -238,9 +239,10 @@ const IncomeForm = () => {
           </div>
 
           <div className="flex items-center justify-between">
+            {" "}
             <button
               type="button"
-              onClick={() => navigate("/dashboard")}
+              onClick={() => navigate(-1)}
               className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors"
             >
               Cancel

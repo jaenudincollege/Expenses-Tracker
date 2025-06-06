@@ -25,20 +25,22 @@ function App() {
             <Routes>
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />
-              <Route path="/register" element={<Register />} />{" "}
+              <Route path="/register" element={<Register />} />
               <Route element={<ProtectedRoute />}>
                 <Route path="/dashboard" element={<Dashboard />} />
                 <Route path="/analytics" element={<Analytics />} />
 
                 {/* Expense Routes */}
                 <Route path="/expenses/new" element={<ExpenseForm />} />
-                <Route path="/expenses/:id" element={<ExpenseDetail />} />
+                {/* Important: More specific routes must come before dynamic ones */}
                 <Route path="/expenses/edit/:id" element={<ExpenseForm />} />
+                <Route path="/expenses/:id" element={<ExpenseDetail />} />
 
                 {/* Income Routes */}
                 <Route path="/incomes/new" element={<IncomeForm />} />
-                <Route path="/incomes/:id" element={<IncomeDetail />} />
+                {/* Important: More specific routes must come before dynamic ones */}
                 <Route path="/incomes/edit/:id" element={<IncomeForm />} />
+                <Route path="/incomes/:id" element={<IncomeDetail />} />
               </Route>
             </Routes>
           </main>

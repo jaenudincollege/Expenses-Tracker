@@ -11,7 +11,7 @@ const Sidebar = () => {
     <div className="bg-white shadow-md h-full py-6 flex flex-col">
       <div className="px-6 mb-8">
         <h2 className="text-xl font-bold text-blue-600">Finance Tracker</h2>
-        <p className="text-sm text-gray-500 mt-2">
+        <p className="text-sm text-gray-500 mt-2 capitalize">
           Welcome, {currentUser?.user?.username || "User"}
         </p>
       </div>

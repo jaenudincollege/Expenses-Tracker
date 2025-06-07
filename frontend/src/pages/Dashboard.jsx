@@ -183,7 +183,7 @@ const Dashboard = () => {
             <h1 className="text-2xl font-bold text-gray-800">
               Finance Dashboard
             </h1>
-            <p className="text-sm text-gray-600">
+            <p className="text-sm text-gray-600 capitalize">
               Welcome back, {currentUser?.user?.username || "User"}
             </p>
           </div>

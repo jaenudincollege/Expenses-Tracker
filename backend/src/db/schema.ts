@@ -26,7 +26,7 @@ export const expenseTable = pgTable("expense", {
   amount: integer().notNull(),
   category: varchar("category", { length: 100 }).notNull(),
   date: timestamp("date").defaultNow().notNull(),
-  description: text("description").notNull().default(""),
+  description: text("description"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -39,7 +39,7 @@ export const incomeTable = pgTable("income", {
   amount: integer().notNull(),
   category: varchar("category", { length: 100 }).notNull(),
   date: timestamp("date").defaultNow().notNull(),
-  description: text("description").notNull().default(""),
+  description: text("description"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

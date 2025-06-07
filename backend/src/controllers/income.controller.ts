@@ -37,7 +37,7 @@ export const addIncome = async (req: Request, res: Response) => {
 
     const { title, amount, category, date, description } = req.body;
 
-    if (!title || !amount || !category || !description) {
+    if (!title || !amount || !category) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
@@ -152,11 +152,9 @@ export const getRecentIncomesByDays = async (req: Request, res: Response) => {
     const validDays = [7, 30, 90, 180, 365];
 
     if (isNaN(daysCount) || !validDays.includes(daysCount)) {
-      return res
-        .status(400)
-        .json({
-          message: `Days parameter must be one of ${validDays.join(", ")}`,
-        });
+      return res.status(400).json({
+        message: `Days parameter must be one of ${validDays.join(", ")}`,
+      });
     }
 
     const incomes = await getRecentIncomes(req.user.id, daysCount);

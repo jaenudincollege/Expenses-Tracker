@@ -149,11 +149,14 @@ export const getRecentIncomesByDays = async (req: Request, res: Response) => {
 
     const { days } = req.params;
     const daysCount = parseInt(days);
+    const validDays = [7, 30, 90, 180, 365];
 
-    if (isNaN(daysCount) || ![30, 60].includes(daysCount)) {
+    if (isNaN(daysCount) || !validDays.includes(daysCount)) {
       return res
         .status(400)
-        .json({ message: "Days parameter must be 30 or 60" });
+        .json({
+          message: `Days parameter must be one of ${validDays.join(", ")}`,
+        });
     }
 
     const incomes = await getRecentIncomes(req.user.id, daysCount);

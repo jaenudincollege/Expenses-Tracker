@@ -50,10 +50,11 @@ export const formatDate = (date, options = {}) => {
 
   const dateObj = typeof date === "string" ? new Date(date) : date;
 
-  return dateObj.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
+  // Updated to 'en-GB' for day month year format, and specified day, month, year.
+  return dateObj.toLocaleDateString("en-GB", {
     day: "numeric",
+    month: "short",
+    year: "numeric",
     ...options,
   });
 };

@@ -4,6 +4,7 @@ import { incomeService } from "../services/api";
 import toast from "react-hot-toast";
 import LoadingSpinner from "../components/LoadingSpinner";
 import { processApiError } from "../utils/errorHandler";
+import { formatDate } from "../utils/helpers"; // Import formatDate
 
 const IncomeDetail = () => {
   const { id } = useParams();
@@ -123,7 +124,7 @@ const IncomeDetail = () => {
           <div className="mb-4 pb-4 border-b border-gray-200">
             <div className="text-sm text-gray-600">Date</div>
             <div className="text-lg font-semibold">
-              {new Date(income.date).toLocaleDateString()}
+              {formatDate(income.date)} {/* Apply formatDate */}
             </div>
           </div>
 

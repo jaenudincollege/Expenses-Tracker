@@ -7,6 +7,7 @@ import usePagination from "../hooks/usePagination";
 import notify from "../utils/toast";
 import MobileActionBar from "../components/MobileActionBar"; // Added for consistency
 import { processApiError } from "../utils/errorHandler"; // Added for error handling
+import { formatDate } from "../utils/helpers"; // Import formatDate
 
 const ExpensesPage = () => {
   const {
@@ -215,7 +216,7 @@ const ExpensesPage = () => {
                 {paginatedExpenses.map((expense) => (
                   <tr key={expense.id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(expense.date).toLocaleDateString()}
+                      {formatDate(expense.date)} {/* Apply formatDate */}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">

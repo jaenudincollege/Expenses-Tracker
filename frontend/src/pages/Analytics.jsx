@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { expenseService, incomeService } from "../services/api";
 import { useAuth } from "../contexts/AuthContext";
-import { formatCurrency } from "../utils/helpers";
+import { formatCurrency, formatDate } from "../utils/helpers"; // Import formatDate
 import { processApiError } from "../utils/errorHandler";
 import LoadingSpinner from "../components/LoadingSpinner";
 
@@ -300,10 +300,8 @@ const Analytics = () => {
                 return (
                   <tr key={month.month}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      {new Date(`${month.month}-01`).toLocaleDateString(
-                        "en-US",
-                        { year: "numeric", month: "long" }
-                      )}
+                      {formatDate(new Date(`${month.month}-01`))}{" "}
+                      {/* Apply formatDate */}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-semibold">
                       {formatCurrency(month.incomes)}
@@ -467,7 +465,8 @@ const Analytics = () => {
                       {formatCurrency(expense.amount)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {new Date(expense.date).toLocaleDateString()}
+                      {formatDate(new Date(expense.date))}{" "}
+                      {/* Apply formatDate */}
                     </td>
                   </tr>
                 ))}

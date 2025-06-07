@@ -25,6 +25,7 @@ import {
   Cell,
 } from "recharts";
 import MobileActionBar from "../components/MobileActionBar";
+import { formatDate } from "../utils/helpers"; // Import formatDate
 
 const Dashboard = () => {
   const { currentUser, logout } = useAuth();
@@ -55,14 +56,17 @@ const Dashboard = () => {
     keepPreviousData: true,
   });
 
-  const transactions = dashboardData?.transactions || { transactions: [] };
+  // Memoize the list of transactions to ensure a stable reference for usePagination
+  const stableTransactionList = useMemo(() => {
+    return dashboardData?.transactions?.transactions || [];
+  }, [dashboardData?.transactions]); // Re-evaluate if the transactions object within dashboardData changes
 
   const {
     paginatedData: paginatedTransactions,
     currentPage: transactionsCurrentPage,
     totalPages: transactionsTotalPages,
     handlePageChange: handleTransactionsPageChange,
-  } = usePagination(transactions?.transactions || [], 10);
+  } = usePagination(stableTransactionList, 10); // Use the memoized stable list
 
   const handlePeriodChange = (days) => {
     setPeriodFilter(days);
@@ -325,7 +329,7 @@ const Dashboard = () => {
                 onClick={handleDownloadTransactionsCSV}
                 disabled={
                   downloadTransactionsMutation.isPending ||
-                  paginatedTransactions.length === 0
+                  stableTransactionList.length === 0 // Use stableTransactionList here
                 }
                 className="text-sm px-3 py-2 sm:px-4 sm:py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors flex-shrink-0"
               >
@@ -346,7 +350,7 @@ const Dashboard = () => {
             </div>
           </div>
 
-          {paginatedTransactions.length > 0 ? (
+          {stableTransactionList.length > 0 ? ( // Use stableTransactionList here
             <>
               <div className="bg-white shadow-md rounded-lg overflow-hidden">
                 <table className="min-w-full divide-y divide-gray-200">
@@ -388,7 +392,8 @@ const Dashboard = () => {
                     {paginatedTransactions.map((transaction) => (
                       <tr key={transaction.id} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                          {new Date(transaction.date).toLocaleDateString()}
+                          {formatDate(transaction.date)}{" "}
+                          {/* Apply formatDate */}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="text-sm font-medium text-gray-900">
@@ -451,7 +456,7 @@ const Dashboard = () => {
         addLinkText="New Entry"
         isDownloadDisabled={
           downloadTransactionsMutation.isPending ||
-          paginatedTransactions.length === 0
+          stableTransactionList.length === 0 // Use stableTransactionList here
         }
       />
     </>

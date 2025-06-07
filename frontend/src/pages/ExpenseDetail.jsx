@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { expenseService } from "../services/api";
 import LoadingSpinner from "../components/LoadingSpinner"; // Added for consistency
 import notify from "../utils/toast"; // Added for notifications
+import { formatDate } from "../utils/helpers"; // Import formatDate
 
 const ExpenseDetail = () => {
   const { id } = useParams();
@@ -118,7 +119,7 @@ const ExpenseDetail = () => {
           <div className="mb-4 pb-4 border-b border-gray-200">
             <div className="text-sm text-gray-600">Date</div>
             <div className="text-lg font-semibold">
-              {new Date(expense.date).toLocaleDateString()}
+              {formatDate(expense.date)}
             </div>
           </div>
 

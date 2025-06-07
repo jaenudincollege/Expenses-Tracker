@@ -1,1 +1,0 @@
-ALTER TABLE "income" ALTER COLUMN "date" SET DEFAULT now();

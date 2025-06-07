@@ -5,6 +5,7 @@ import { incomeService } from "../services/api";
 import { processApiError } from "../utils/errorHandler";
 import toast from "react-hot-toast";
 import LoadingSpinner from "../components/LoadingSpinner";
+import { useEffect } from "react";
 
 const IncomeForm = () => {
   const { id } = useParams();
@@ -20,6 +21,7 @@ const IncomeForm = () => {
   const isEditMode = !!id;
 
   const {
+    data: existingIncome,
     isLoading: isLoadingIncome,
     isError: isLoadError,
     error: loadError,
@@ -30,19 +32,34 @@ const IncomeForm = () => {
       return response.data?.income || response.data;
     },
     enabled: isEditMode,
-    onSuccess: (data) => {
-      if (data) {
-        const formData = {
-          ...data,
-          date: data.date
-            ? new Date(data.date).toISOString().split("T")[0]
-            : "",
-          amount: Math.abs(data.amount),
-        };
-        reset(formData);
-      }
-    },
   });
+
+  // Use useEffect to set form values after data is loaded
+  useEffect(() => {
+    if (existingIncome && isEditMode) {
+      // Format the date to YYYY-MM-DD for the date input
+      const formattedDate = existingIncome.date
+        ? new Date(existingIncome.date).toISOString().split("T")[0]
+        : "";
+
+      // Reset the form with the loaded data
+      reset({
+        title: existingIncome.title || "",
+        amount: Math.abs(existingIncome.amount) || "",
+        category: existingIncome.category || "",
+        date: formattedDate,
+        description: existingIncome.description || "",
+      });
+
+      console.log("Income form reset with data:", {
+        title: existingIncome.title,
+        amount: Math.abs(existingIncome.amount),
+        category: existingIncome.category,
+        date: formattedDate,
+        description: existingIncome.description,
+      });
+    }
+  }, [existingIncome, reset, isEditMode]);
 
   const mutation = useMutation({
     mutationFn: async (data) => {

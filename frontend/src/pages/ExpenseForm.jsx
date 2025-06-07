@@ -5,6 +5,7 @@ import { expenseService } from "../services/api";
 import { processApiError } from "../utils/errorHandler";
 import toast from "react-hot-toast";
 import LoadingSpinner from "../components/LoadingSpinner";
+import { useEffect } from "react";
 
 const ExpenseForm = () => {
   const { id } = useParams();
@@ -20,7 +21,6 @@ const ExpenseForm = () => {
   const isEditMode = !!id;
 
   const {
-    // eslint-disable-next-line no-unused-vars
     data: existingExpense,
     isLoading: isLoadingExpense,
     isError: isLoadError,
@@ -32,13 +32,31 @@ const ExpenseForm = () => {
       return response.data?.expense || response.data;
     },
     enabled: isEditMode,
-    onSuccess: (data) => {
-      if (data) {
-        const formData = { ...data, amount: Math.abs(data.amount) };
-        reset(formData);
-      }
-    },
   });
+
+  useEffect(() => {
+    if (existingExpense && isEditMode) {
+      const formattedDate = existingExpense.date
+        ? new Date(existingExpense.date).toISOString().split("T")[0]
+        : "";
+
+      reset({
+        title: existingExpense.title || "",
+        amount: Math.abs(existingExpense.amount) || "",
+        category: existingExpense.category || "",
+        date: formattedDate,
+        description: existingExpense.description || "",
+      });
+
+      console.log("Form reset with data:", {
+        title: existingExpense.title,
+        amount: Math.abs(existingExpense.amount),
+        category: existingExpense.category,
+        date: formattedDate,
+        description: existingExpense.description,
+      });
+    }
+  }, [existingExpense, reset, isEditMode]);
 
   const mutation = useMutation({
     mutationFn: async (data) => {

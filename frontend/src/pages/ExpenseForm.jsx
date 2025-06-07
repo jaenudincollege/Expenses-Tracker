@@ -1,46 +1,70 @@
-import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useNavigate, useParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { expenseService } from "../services/api";
 import { processApiError } from "../utils/errorHandler";
 import toast from "react-hot-toast";
+import LoadingSpinner from "../components/LoadingSpinner";
+import { useEffect } from "react";
 
 const ExpenseForm = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
-  } = useForm();
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
+  } = useForm({
+    defaultValues: {
+      date: new Date().toISOString().split("T")[0], // Set today's date as default
+      description: "", // Set empty string as default for description
+    },
+  });
+
   const isEditMode = !!id;
 
-  useEffect(() => {
-    const loadExpense = async () => {
-      if (isEditMode) {
-        try {
-          setLoading(true);
-          const response = await expenseService.getById(id);
-          // Handle nested data structure - direct access or through expense property
-          reset(response.data?.expense || response.data);
-        } catch (err) {
-          setError("Failed to load expense");
-          console.error(err);
-        } finally {
-          setLoading(false);
-        }
-      }
-    };
+  const {
+    data: existingExpense,
+    isLoading: isLoadingExpense,
+    isError: isLoadError,
+    error: loadError,
+  } = useQuery({
+    queryKey: ["expense", id],
+    queryFn: async () => {
+      const response = await expenseService.getById(id);
+      return response.data?.expense || response.data;
+    },
+    enabled: isEditMode,
+  });
 
-    loadExpense();
-  }, [id, reset, isEditMode]);
-  const onSubmit = async (data) => {
-    try {
-      setLoading(true);
-      // Make sure amount is negative for expenses
+  useEffect(() => {
+    if (existingExpense && isEditMode) {
+      const formattedDate = existingExpense.date
+        ? new Date(existingExpense.date).toISOString().split("T")[0]
+        : "";
+
+      reset({
+        title: existingExpense.title || "",
+        amount: Math.abs(existingExpense.amount) || "",
+        category: existingExpense.category || "",
+        date: formattedDate,
+        description: existingExpense.description || "",
+      });
+
+      console.log("Form reset with data:", {
+        title: existingExpense.title,
+        amount: Math.abs(existingExpense.amount),
+        category: existingExpense.category,
+        date: formattedDate,
+        description: existingExpense.description,
+      });
+    }
+  }, [existingExpense, reset, isEditMode]);
+
+  const mutation = useMutation({
+    mutationFn: async (data) => {
       const formattedData = {
         ...data,
         amount:
@@ -48,27 +72,62 @@ const ExpenseForm = () => {
             ? -Math.abs(parseFloat(data.amount))
             : parseFloat(data.amount),
       };
-
       if (isEditMode) {
-        const response = await expenseService.update(id, formattedData);
-        toast.success("Expense updated successfully!");
-        navigate("/dashboard");
-        return response;
+        return expenseService.update(id, formattedData);
       } else {
-        const response = await expenseService.create(formattedData);
-        toast.success("Expense created successfully!");
-        navigate("/dashboard");
-        return response;
+        return expenseService.create(formattedData);
       }
-    } catch (err) {
+    },
+    onSuccess: () => {
+      toast.success(
+        `Expense ${isEditMode ? "updated" : "created"} successfully!`
+      );
+      queryClient.invalidateQueries(["expenses"]);
+      queryClient.invalidateQueries(["expense", id]);
+      queryClient.invalidateQueries(["dashboardData"]);
+      navigate(isEditMode ? -1 : "/expenses");
+    },
+    onError: (err) => {
       const errorResult = processApiError(err, {
         defaultMessage: `Failed to ${isEditMode ? "update" : "create"} expense`,
       });
-      setError(errorResult.message);
-    } finally {
-      setLoading(false);
-    }
+      toast.error(errorResult.message);
+    },
+  });
+
+  const onSubmit = (data) => {
+    mutation.mutate(data);
   };
+
+  if (isLoadingExpense && isEditMode) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="large" message="Loading expense data..." />
+      </div>
+    );
+  }
+
+  if (isLoadError && isEditMode) {
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-lg">
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded shadow-md">
+          <p className="font-bold">Error Loading Expense</p>
+          <p>
+            {loadError?.response?.data?.message ||
+              loadError?.message ||
+              "Failed to load expense details for editing."}
+          </p>
+          <button
+            onClick={() => navigate(-1)}
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-lg">
       <div className="bg-white shadow-md rounded-lg p-6">
@@ -76,12 +135,16 @@ const ExpenseForm = () => {
           {isEditMode ? "Edit Expense" : "Add New Expense"}
         </h2>
 
-        {error && (
+        {mutation.isError && (
           <div
             className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4"
             role="alert"
           >
-            <p>{error}</p>
+            <p>
+              {mutation.error?.response?.data?.message ||
+                mutation.error?.message ||
+                `Failed to ${isEditMode ? "update" : "create"} expense`}
+            </p>
           </div>
         )}
 
@@ -99,6 +162,7 @@ const ExpenseForm = () => {
                 errors.title ? "border-red-500" : "border-gray-300"
               } rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline`}
               {...register("title", { required: "Title is required" })}
+              disabled={mutation.isPending}
             />
             {errors.title && (
               <p className="text-red-500 text-xs italic mt-1">
@@ -113,11 +177,11 @@ const ExpenseForm = () => {
               htmlFor="amount"
             >
               Amount
-            </label>{" "}
+            </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-700">
                 $
-              </span>{" "}
+              </span>
               <input
                 id="amount"
                 type="number"
@@ -128,22 +192,19 @@ const ExpenseForm = () => {
                 } rounded w-full py-2 px-3 pl-8 text-gray-700 leading-tight focus:outline-none focus:shadow-outline`}
                 {...register("amount", {
                   required: "Amount is required",
+                  valueAsNumber: true,
                   min: {
                     value: 0.01,
                     message: "Amount must be greater than zero",
                   },
                 })}
+                disabled={mutation.isPending}
               />
-            </div>{" "}
+            </div>
             <p className="text-gray-500 text-xs mt-1">
               Enter a positive number (e.g., 100 for a $100 expense). The system
               will automatically record it as a negative value (-100).
             </p>
-            {errors.amount && (
-              <p className="text-red-500 text-xs italic mt-1">
-                {errors.amount.message}
-              </p>
-            )}
             {errors.amount && (
               <p className="text-red-500 text-xs italic mt-1">
                 {errors.amount.message}
@@ -164,6 +225,7 @@ const ExpenseForm = () => {
                 errors.category ? "border-red-500" : "border-gray-300"
               } rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline`}
               {...register("category", { required: "Category is required" })}
+              disabled={mutation.isPending}
             >
               <option value="">Select a category</option>
               <option value="Food">Food & Dining</option>
@@ -197,6 +259,7 @@ const ExpenseForm = () => {
                 errors.date ? "border-red-500" : "border-gray-300"
               } rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline`}
               {...register("date", { required: "Date is required" })}
+              disabled={mutation.isPending}
             />
             {errors.date && (
               <p className="text-red-500 text-xs italic mt-1">
@@ -214,52 +277,34 @@ const ExpenseForm = () => {
             </label>
             <textarea
               id="description"
-              className="shadow appearance-none border border-gray-300 rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
               rows="3"
+              className={`shadow appearance-none border ${
+                errors.description ? "border-red-500" : "border-gray-300"
+              } rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline`}
               {...register("description")}
-            ></textarea>
+              disabled={mutation.isPending}
+            />
           </div>
 
           <div className="flex items-center justify-between">
             <button
-              type="button"
-              onClick={() => navigate("/dashboard")}
-              className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors"
+              type="submit"
+              className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:opacity-50"
+              disabled={mutation.isPending || (isEditMode && isLoadingExpense)}
             >
-              Cancel
+              {mutation.isPending
+                ? "Saving..."
+                : isEditMode
+                ? "Update Expense"
+                : "Add Expense"}
             </button>
             <button
-              type="submit"
-              disabled={loading}
-              className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition-colors disabled:opacity-50"
+              type="button"
+              onClick={() => navigate(-1)}
+              className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+              disabled={mutation.isPending}
             >
-              {loading ? (
-                <span className="flex items-center">
-                  <svg
-                    className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
-                    xmlns="http://www.w3.org/2000/svg"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                  >
-                    <circle
-                      className="opacity-25"
-                      cx="12"
-                      cy="12"
-                      r="10"
-                      stroke="currentColor"
-                      strokeWidth="4"
-                    ></circle>
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                    ></path>
-                  </svg>
-                  Processing
-                </span>
-              ) : (
-                "Save Expense"
-              )}
+              Cancel
             </button>
           </div>
         </form>

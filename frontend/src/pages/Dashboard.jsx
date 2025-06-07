@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useState, useMemo } from "react";
 import { Link } from "react-router-dom";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import {
   expenseService,
   incomeService,
@@ -10,476 +11,445 @@ import DashboardSummary from "../components/DashboardSummary";
 import Pagination from "../components/Pagination";
 import LoadingSpinner from "../components/LoadingSpinner";
 import usePagination from "../hooks/usePagination";
+import notify from "../utils/toast";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
+} from "recharts";
+import { formatDate } from "../utils/helpers"; // Import formatDate
 
 const Dashboard = () => {
   const { currentUser, logout } = useAuth();
-  const [expenses, setExpenses] = useState([]);
-  const [incomes, setIncomes] = useState([]);
-  const [transactions, setTransactions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [periodFilter, setPeriodFilter] = useState(30);
 
-  // Use pagination hook for expenses
+  const fetchDashboardData = async (filter) => {
+    const [expensesResponse, incomesResponse, transactionsResponse] =
+      await Promise.all([
+        expenseService.getHistory(filter),
+        incomeService.getHistory(filter),
+        transactionService.getHistory(filter),
+      ]);
+    return {
+      expenses: expensesResponse.data,
+      incomes: incomesResponse.data,
+      transactions: transactionsResponse.data,
+    };
+  };
+
   const {
-    paginatedData: paginatedExpenses,
-    currentPage: expensesCurrentPage,
-    totalPages: expensesTotalPages,
-    handlePageChange: handleExpensesPageChange,
-  } = usePagination(expenses?.expenses || [], 5);
+    data: dashboardData,
+    isLoading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: ["dashboardData", periodFilter],
+    queryFn: () => fetchDashboardData(periodFilter),
+    keepPreviousData: true,
+  });
 
-  // Use pagination hook for incomes
-  const {
-    paginatedData: paginatedIncomes,
-    currentPage: incomesCurrentPage,
-    totalPages: incomesTotalPages,
-    handlePageChange: handleIncomesPageChange,
-  } = usePagination(incomes?.incomes || [], 5);
+  // Memoize the list of transactions to ensure a stable reference for usePagination
+  const stableTransactionList = useMemo(() => {
+    return dashboardData?.transactions?.transactions || [];
+  }, [dashboardData?.transactions]); // Re-evaluate if the transactions object within dashboardData changes
 
-  // Use pagination hook for transactions
   const {
     paginatedData: paginatedTransactions,
     currentPage: transactionsCurrentPage,
     totalPages: transactionsTotalPages,
     handlePageChange: handleTransactionsPageChange,
-  } = usePagination(transactions?.transactions || [], 10);
+  } = usePagination(stableTransactionList, 10); // Use the memoized stable list
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        // Get data for the last 30 days
-        const [expensesResponse, incomesResponse, transactionsResponse] =
-          await Promise.all([
-            expenseService.getHistory(30),
-            incomeService.getHistory(30),
-            transactionService.getHistory(30),
-          ]); // Store the complete response object to handle nested data structure
-        setExpenses(expensesResponse.data);
-        setIncomes(incomesResponse.data);
-        setTransactions(transactionsResponse.data);
-      } catch (err) {
-        setError("Failed to load data");
-        console.error(err);
-      } finally {
-        setLoading(false);
+  const handlePeriodChange = (days) => {
+    setPeriodFilter(days);
+  };
+
+  const downloadTransactionsMutation = useMutation({
+    mutationFn: transactionService.downloadCSV,
+    onMutate: () => {
+      const loadingToastId = notify.loading(
+        "Preparing transactions CSV download..."
+      );
+      return { loadingToastId };
+    },
+    onSuccess: (data, variables, context) => {
+      if (context?.loadingToastId) {
+        notify.dismiss(context.loadingToastId);
       }
-    };
+      notify.success("Transactions CSV downloaded successfully");
+    },
+    onError: (error, variables, context) => {
+      if (context?.loadingToastId) {
+        notify.dismiss(context.loadingToastId);
+      }
+      notify.error("Failed to download transactions CSV");
+      console.error(error);
+    },
+  });
 
-    fetchData();
-  }, []);
-
-  const handleDownloadExpensesCSV = async () => {
-    try {
-      const response = await expenseService.downloadCSV();
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", "expenses.csv");
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (err) {
-      setError("Failed to download CSV");
-      console.error(err);
-    }
-  };
-
-  const handleDownloadIncomesCSV = async () => {
-    try {
-      const response = await incomeService.downloadCSV();
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", "incomes.csv");
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (err) {
-      setError("Failed to download CSV");
-      console.error(err);
-    }
-  };
-
-  const handleDownloadTransactionsCSV = async () => {
-    try {
-      const response = await transactionService.downloadCSV();
-      const url = window.URL.createObjectURL(new Blob([response.data]));
-      const link = document.createElement("a");
-      link.href = url;
-      link.setAttribute("download", "transactions.csv");
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } catch (err) {
-      setError("Failed to download CSV");
-      console.error(err);
-    }
+  const handleDownloadTransactionsCSV = () => {
+    downloadTransactionsMutation.mutate();
   };
 
   const handleLogout = () => {
     logout();
   };
-  if (loading)
+
+  const monthlyData = useMemo(() => {
+    const months = [];
+    const today = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const month = new Date(today);
+      month.setMonth(today.getMonth() - i);
+      const monthName = month.toLocaleString("default", { month: "short" });
+      months.push({
+        name: monthName,
+        income: 0,
+        expense: 0,
+      });
+    }
+
+    const currentExpenses = dashboardData?.expenses?.expenses || [];
+    const currentIncomes = dashboardData?.incomes?.incomes || [];
+
+    currentExpenses.forEach((expense) => {
+      const date = new Date(expense.date);
+      const monthIndex =
+        today.getMonth() -
+        date.getMonth() +
+        (today.getFullYear() - date.getFullYear()) * 12;
+      if (monthIndex >= 0 && monthIndex < 6) {
+        months[5 - monthIndex].expense += Math.abs(parseFloat(expense.amount));
+      }
+    });
+
+    currentIncomes.forEach((income) => {
+      const date = new Date(income.date);
+      const monthIndex =
+        today.getMonth() -
+        date.getMonth() +
+        (today.getFullYear() - date.getFullYear()) * 12;
+      if (monthIndex >= 0 && monthIndex < 6) {
+        months[5 - monthIndex].income += parseFloat(income.amount);
+      }
+    });
+
+    return months;
+  }, [dashboardData]);
+
+  const categoryData = useMemo(() => {
+    const currentExpenses = dashboardData?.expenses?.expenses || [];
+    const categories = {};
+
+    currentExpenses.forEach((expense) => {
+      if (!categories[expense.category]) {
+        categories[expense.category] = 0;
+      }
+      categories[expense.category] += Math.abs(parseFloat(expense.amount));
+    });
+
+    return Object.entries(categories).map(([name, value]) => ({ name, value }));
+  }, [dashboardData]);
+
+  const COLORS = [
+    "#0088FE",
+    "#00C49F",
+    "#FFBB28",
+    "#FF8042",
+    "#8884d8",
+    "#82ca9d",
+  ];
+
+  if (isLoading && !dashboardData)
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-full flex items-center justify-center">
         <LoadingSpinner size="large" message="Loading your financial data..." />
       </div>
     );
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-6xl">
-      <header className="bg-white shadow-md rounded-lg p-6 mb-8 flex flex-col md:flex-row justify-between items-center">
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-800">
-          Finance Dashboard
-        </h1>{" "}
-        <div className="flex items-center gap-4 mt-4 md:mt-0">
-          <p className="text-gray-700">
-            Welcome,{" "}
-            <span className="font-semibold capitalize">
-              {currentUser?.user?.username || "User"}
-            </span>
-          </p>
-          <Link
-            to="/analytics"
-            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded transition-colors"
-          >
-            View Analytics
-          </Link>
+    <>
+      <div className="pb-16 sm:pb-0">
+        <div className="mb-6 flex flex-col sm:flex-row justify-between items-center gap-2">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800">
+              Finance Dashboard
+            </h1>
+            <p className="text-sm text-gray-600 capitalize">
+              Welcome back, {currentUser?.user?.username || "User"}
+            </p>
+          </div>
           <button
             onClick={handleLogout}
-            className="bg-red-500 hover:bg-red-600 text-white px-4 py-2 rounded transition-colors"
+            className="bg-red-500 hover:bg-red-600 text-white px-3 py-2 sm:px-4 sm:py-2 rounded transition-colors text-sm sm:text-base flex-shrink-0"
           >
-            Logout
+            <span className="whitespace-nowrap">Logout</span>
           </button>
         </div>
-      </header>{" "}
-      {error && (
-        <div className="bg-red-100 text-red-700 p-4 rounded-md mb-6">
-          {error}
-        </div>
-      )}
-      {/* Financial Summary Section */}
-      <DashboardSummary expenses={expenses} incomes={incomes} />
-      <section className="bg-white shadow-md rounded-lg p-6 mb-8">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4 md:mb-0">
-            Expenses
-          </h2>
-          <div className="flex gap-3">
-            <Link
-              to="/expenses/new"
-              className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md"
-            >
-              Add New
-            </Link>
-            <button
-              onClick={handleDownloadExpensesCSV}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md"
-            >
-              Download CSV
-            </button>
-          </div>
-        </div>{" "}
-        {expenses?.expenses?.length > 0 ? (
-          <>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      Title
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      Amount
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      Category
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      Date
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {paginatedExpenses.map((expense) => (
-                    <tr key={expense.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {expense.title}
-                      </td>{" "}
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-red-600 font-semibold">
-                        ${Math.abs(parseFloat(expense.amount)).toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {expense.category}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {new Date(expense.date).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex space-x-2">
-                          <Link
-                            to={`/expenses/${expense.id}`}
-                            className="text-indigo-600 hover:text-indigo-900"
-                          >
-                            View
-                          </Link>
-                          <Link
-                            to={`/expenses/edit/${expense.id}`}
-                            className="text-blue-600 hover:text-blue-900 ml-3"
-                          >
-                            Edit
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
 
-            {/* Pagination for expenses */}
-            {expensesTotalPages > 1 && (
-              <Pagination
-                currentPage={expensesCurrentPage}
-                totalPages={expensesTotalPages}
-                onPageChange={handleExpensesPageChange}
-              />
-            )}
-          </>
-        ) : (
-          <p className="text-gray-500 text-center py-6">No expenses found</p>
-        )}
-      </section>{" "}
-      <section className="bg-white shadow-md rounded-lg p-6 mb-8">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4 md:mb-0">
-            Incomes
-          </h2>
-          <div className="flex gap-3">
-            <Link
-              to="/incomes/new"
-              className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded-md"
-            >
-              Add New
-            </Link>
-            <button
-              onClick={handleDownloadIncomesCSV}
-              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md"
-            >
-              Download CSV
-            </button>
+        {isError && (
+          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded">
+            <p>
+              {queryError?.response?.data?.message ||
+                queryError?.message ||
+                "Failed to fetch dashboard data"}
+            </p>
           </div>
-        </div>{" "}
-        {incomes?.incomes?.length > 0 ? (
-          <>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      Title
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      Amount
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      Category
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      Date
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {paginatedIncomes.map((income) => (
-                    <tr key={income.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {income.title}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-green-600 font-semibold">
-                        ${parseFloat(income.amount).toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {income.category}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {new Date(income.date).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex space-x-2">
-                          <Link
-                            to={`/incomes/${income.id}`}
-                            className="text-indigo-600 hover:text-indigo-900"
-                          >
-                            View
-                          </Link>
-                          <Link
-                            to={`/incomes/edit/${income.id}`}
-                            className="text-blue-600 hover:text-blue-900 ml-3"
-                          >
-                            Edit
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination for incomes */}
-            {incomesTotalPages > 1 && (
-              <Pagination
-                currentPage={incomesCurrentPage}
-                totalPages={incomesTotalPages}
-                onPageChange={handleIncomesPageChange}
-              />
-            )}
-          </>
-        ) : (
-          <p className="text-gray-500 text-center py-6">No incomes found</p>
         )}
-      </section>{" "}
-      <section className="bg-white shadow-md rounded-lg p-6 mb-8">
-        <div className="flex flex-col md:flex-row justify-between items-center mb-6">
-          <h2 className="text-xl font-semibold text-gray-800 mb-4 md:mb-0">
-            Recent Transactions
-          </h2>
+
+        <div className="mb-6 flex flex-wrap items-center gap-2 sm:space-x-2 justify-start">
+          <span className="text-sm text-gray-700 whitespace-nowrap">
+            Time period:
+          </span>
           <button
-            onClick={handleDownloadTransactionsCSV}
-            className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-md"
+            onClick={() => handlePeriodChange(7)}
+            className={`px-3 py-1 text-sm rounded-md flex-shrink-0 ${
+              periodFilter === 7
+                ? "bg-blue-600 text-white"
+                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+            }`}
           >
-            Download CSV
+            7 days
           </button>
-        </div>{" "}
-        {transactions?.transactions?.length > 0 ? (
-          <>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      Title
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      Amount
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      Category
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      Type
-                    </th>
-                    <th
-                      scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                    >
-                      Date
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {paginatedTransactions.map((transaction) => (
-                    <tr key={transaction.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                        {transaction.title}
-                      </td>
-                      <td
-                        className={`px-6 py-4 whitespace-nowrap text-sm font-semibold ${
-                          transaction.amount < 0
-                            ? "text-red-600"
-                            : "text-green-600"
-                        }`}
+          <button
+            onClick={() => handlePeriodChange(30)}
+            className={`px-3 py-1 text-sm rounded-md flex-shrink-0 ${
+              periodFilter === 30
+                ? "bg-blue-600 text-white"
+                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+            }`}
+          >
+            30 days
+          </button>
+          <button
+            onClick={() => handlePeriodChange(90)}
+            className={`px-3 py-1 text-sm rounded-md flex-shrink-0 ${
+              periodFilter === 90
+                ? "bg-blue-600 text-white"
+                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+            }`}
+          >
+            90 days
+          </button>
+          <button
+            onClick={() => handlePeriodChange(365)}
+            className={`px-3 py-1 text-sm rounded-md flex-shrink-0 ${
+              periodFilter === 365
+                ? "bg-blue-600 text-white"
+                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+            }`}
+          >
+            1 year
+          </button>
+        </div>
+
+        <DashboardSummary
+          expenses={dashboardData?.expenses}
+          incomes={dashboardData?.incomes}
+        />
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+          <div className="bg-white shadow-md rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">
+              Income vs Expenses (Last 6 Months)
+            </h2>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={monthlyData}>
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                  <Legend />
+                  <Bar
+                    dataKey="income"
+                    name="Income"
+                    fill="#4ade80"
+                    radius={[4, 4, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="expense"
+                    name="Expense"
+                    fill="#f87171"
+                    radius={[4, 4, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          <div className="bg-white shadow-md rounded-lg p-6">
+            <h2 className="text-lg font-semibold text-gray-800 mb-4">
+              Expense by Category
+            </h2>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={categoryData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    outerRadius={80}
+                    fill="#8884d8"
+                    dataKey="value"
+                    nameKey="name"
+                    label={({ name, percent }) =>
+                      `${name}: ${(percent * 100).toFixed(0)}%`
+                    }
+                  >
+                    {categoryData.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={COLORS[index % COLORS.length]}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip formatter={(value) => `$${value.toFixed(2)}`} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-8">
+          <div className="flex flex-col sm:flex-row justify-between items-center mb-4 gap-2">
+            <h2 className="text-xl font-semibold text-gray-800">
+              Recent Transactions
+            </h2>
+            <div className="flex flex-wrap items-center gap-2 sm:space-x-2 justify-start sm:justify-end">
+              <button
+                onClick={handleDownloadTransactionsCSV}
+                disabled={
+                  downloadTransactionsMutation.isPending ||
+                  stableTransactionList.length === 0 // Use stableTransactionList here
+                }
+                className="text-sm px-3 py-2 sm:px-4 sm:py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200 transition-colors flex-shrink-0"
+              >
+                <span className="whitespace-nowrap">Download CSV</span>
+              </button>
+              <Link
+                to="/expenses"
+                className="text-sm px-3 py-2 sm:px-4 sm:py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200 transition-colors flex-shrink-0"
+              >
+                <span className="whitespace-nowrap">View All Expenses</span>
+              </Link>
+              <Link
+                to="/incomes"
+                className="text-sm px-3 py-2 sm:px-4 sm:py-2 bg-green-100 text-green-700 rounded-md hover:bg-green-200 transition-colors flex-shrink-0"
+              >
+                <span className="whitespace-nowrap">View All Incomes</span>
+              </Link>
+            </div>
+          </div>
+
+          {stableTransactionList.length > 0 ? ( // Use stableTransactionList here
+            <>
+              <div className="bg-white shadow-md rounded-lg overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th
+                        scope="col"
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
                       >
-                        ${Math.abs(parseFloat(transaction.amount)).toFixed(2)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {transaction.category}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm">
-                        <span
-                          className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                        Date
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      >
+                        Title
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      >
+                        Category
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      >
+                        Amount
+                      </th>
+                      <th
+                        scope="col"
+                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                      >
+                        Type
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {paginatedTransactions.map((transaction) => (
+                      <tr key={transaction.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {formatDate(transaction.date)}{" "}
+                          {/* Apply formatDate */}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="text-sm font-medium text-gray-900">
+                            {transaction.title}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              transaction.amount < 0
+                                ? "bg-red-100 text-red-800"
+                                : "bg-green-100 text-green-800"
+                            }`}
+                          >
+                            {transaction.category}
+                          </span>
+                        </td>
+                        <td
+                          className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
                             transaction.amount < 0
-                              ? "bg-red-100 text-red-800"
-                              : "bg-green-100 text-green-800"
+                              ? "text-red-600"
+                              : "text-green-600"
                           }`}
                         >
+                          {transaction.amount < 0
+                            ? `-$${Math.abs(
+                                parseFloat(transaction.amount)
+                              ).toFixed(2)}`
+                            : `+$${parseFloat(transaction.amount).toFixed(2)}`}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                           {transaction.amount < 0 ? "Expense" : "Income"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        {new Date(transaction.date).toLocaleDateString()}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
 
-            {/* Pagination for transactions */}
-            {transactionsTotalPages > 1 && (
-              <Pagination
-                currentPage={transactionsCurrentPage}
-                totalPages={transactionsTotalPages}
-                onPageChange={handleTransactionsPageChange}
-              />
-            )}
-          </>
-        ) : (
-          <p className="text-gray-500 text-center py-6">
-            No transactions found
-          </p>
-        )}
-      </section>
-    </div>
+              {transactionsTotalPages > 1 && (
+                <Pagination
+                  currentPage={transactionsCurrentPage}
+                  totalPages={transactionsTotalPages}
+                  onPageChange={handleTransactionsPageChange}
+                />
+              )}
+            </>
+          ) : (
+            <div className="bg-white shadow-md rounded-lg p-6 text-center">
+              <p className="text-gray-500">
+                No transactions found for this period.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
   );
 };
 

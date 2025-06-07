@@ -1,80 +1,163 @@
-import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { expenseService } from "../services/api";
+import LoadingSpinner from "../components/LoadingSpinner"; // Added for consistency
+import notify from "../utils/toast"; // Added for notifications
+import { formatDate } from "../utils/helpers"; // Import formatDate
 
 const ExpenseDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [expense, setExpense] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const fetchExpense = async () => {
-      try {
-        setLoading(true);
-        const response = await expenseService.getById(id);
-        // Handle nested data structure - direct access or through expense property
-        setExpense(response.data?.expense || response.data);
-      } catch (err) {
-        setError("Failed to load expense details");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const {
+    data: expense,
+    isLoading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: ["expense", id],
+    queryFn: async () => {
+      const response = await expenseService.getById(id);
+      return response.data?.expense || response.data;
+    },
+    enabled: !!id, // Only run query if id is available
+  });
 
-    fetchExpense();
-  }, [id]);
+  const deleteMutation = useMutation({
+    mutationFn: expenseService.delete,
+    onSuccess: () => {
+      notify.success("Expense deleted successfully");
+      queryClient.invalidateQueries(["expenses"]); // Invalidate list to refetch
+      queryClient.invalidateQueries(["dashboardData"]); // Invalidate dashboard data
+      navigate("/expenses"); // Navigate to expenses list or dashboard
+    },
+    onError: (error) => {
+      notify.error(error.response?.data?.message || "Failed to delete expense");
+      console.error(error);
+    },
+  });
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (window.confirm("Are you sure you want to delete this expense?")) {
-      try {
-        await expenseService.delete(id);
-        navigate("/dashboard");
-      } catch (err) {
-        setError("Failed to delete expense");
-        console.error(err);
-      }
+      deleteMutation.mutate(id);
     }
   };
 
-  if (loading) return <div>Loading...</div>;
-  if (error) return <div className="error-message">{error}</div>;
-  if (!expense) return <div>Expense not found</div>;
+  if (isLoading)
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingSpinner size="large" message="Loading expense details..." />
+      </div>
+    );
+
+  if (isError)
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-md">
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded shadow-md">
+          <p className="font-bold">Error</p>
+          <p>
+            {queryError?.response?.data?.message ||
+              queryError?.message ||
+              "Failed to load expense details"}
+          </p>
+          <button
+            onClick={() => navigate(-1)}
+            className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
+
+  if (!expense && !isLoading)
+    // Added !isLoading to prevent flash of "Not Found"
+    return (
+      <div className="container mx-auto px-4 py-8 max-w-md">
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded shadow-md">
+          <p className="font-bold">Not Found</p>
+          <p>The expense you're looking for could not be found.</p>
+          <button
+            onClick={() => navigate(-1)}
+            className="mt-4 px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 transition-colors"
+          >
+            Go Back
+          </button>
+        </div>
+      </div>
+    );
 
   return (
-    <div className="detail-container">
-      <h2>Expense Detail</h2>
-      <div className="detail-card">
-        <div className="detail-row">
-          <strong>Title:</strong>
-          <span>{expense.title}</span>
-        </div>{" "}
-        <div className="detail-row">
-          <strong>Amount:</strong>
-          <span className="text-red-500">${Math.abs(expense.amount)}</span>
+    <div className="container mx-auto px-4 py-8 max-w-2xl">
+      <div className="bg-white shadow-lg rounded-lg overflow-hidden">
+        <div className="bg-red-600 px-6 py-4">
+          <h2 className="text-xl font-bold text-white">Expense Detail</h2>
         </div>
-        <div className="detail-row">
-          <strong>Category:</strong>
-          <span>{expense.category}</span>
-        </div>
-        <div className="detail-row">
-          <strong>Date:</strong>
-          <span>{new Date(expense.date).toLocaleDateString()}</span>
-        </div>
-        <div className="detail-row">
-          <strong>Description:</strong>
-          <span>{expense.description || "No description provided"}</span>
-        </div>
-        <div className="detail-actions">
-          <button onClick={() => navigate(`/expenses/edit/${id}`)}>Edit</button>
-          <button onClick={handleDelete} className="delete-btn">
-            Delete
-          </button>
-          <button onClick={() => navigate("/dashboard")}>
-            Back to Dashboard
-          </button>
+        <div className="p-6">
+          <div className="mb-4 pb-4 border-b border-gray-200">
+            <div className="text-sm text-gray-600">Title</div>
+            <div className="text-lg font-semibold">{expense.title}</div>
+          </div>
+
+          <div className="mb-4 pb-4 border-b border-gray-200">
+            <div className="text-sm text-gray-600">Amount</div>
+            <div className="text-lg font-semibold text-red-600">
+              -${Math.abs(expense.amount).toFixed(2)}
+            </div>
+          </div>
+
+          <div className="mb-4 pb-4 border-b border-gray-200">
+            <div className="text-sm text-gray-600">Category</div>
+            <div className="text-lg font-semibold">
+              <span className="inline-block bg-red-100 text-red-800 px-2 py-1 rounded-full text-sm">
+                {expense.category}
+              </span>
+            </div>
+          </div>
+
+          <div className="mb-4 pb-4 border-b border-gray-200">
+            <div className="text-sm text-gray-600">Date</div>
+            <div className="text-lg font-semibold">
+              {formatDate(expense.date)}
+            </div>
+          </div>
+
+          <div className="mb-6">
+            <div className="text-sm text-gray-600">Description</div>
+            <div className="text-gray-800 mt-1">
+              {expense.description || "No description provided"}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-3 mt-8">
+            <button
+              onClick={() => navigate(`/expenses/edit/${id}`)}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              disabled={deleteMutation.isPending}
+            >
+              Edit
+            </button>
+            <button
+              onClick={handleDelete}
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
+            </button>
+            <button
+              onClick={() => navigate(-1)}
+              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors"
+            >
+              Back
+            </button>
+            <button
+              onClick={() => navigate("/dashboard")}
+              className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+            >
+              Dashboard
+            </button>
+          </div>
         </div>
       </div>
     </div>

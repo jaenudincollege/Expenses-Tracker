@@ -23,10 +23,11 @@ export const createExpense = async (
     .values({
       userId,
       title,
-      amount,
+      // Convert to string for decimal column
+      amount: amount.toString(),
       category,
       date: date ? new Date(date) : new Date(),
-      description,
+      description: description || "",
     })
     .returning();
 
@@ -70,10 +71,13 @@ export const updateExpense = async (
     .update(schema.expenseTable)
     .set({
       title: updateData.title || expense.title,
-      amount: updateData.amount || expense.amount,
+      // Convert to string for decimal column
+      amount: updateData.amount
+        ? updateData.amount.toString()
+        : expense.amount.toString(),
       category: updateData.category || expense.category,
       date: updateData.date ? new Date(updateData.date) : expense.date,
-      description: updateData.description || expense.description,
+      description: updateData.description ?? expense.description,
       updatedAt: new Date(),
     })
     .where(eq(schema.expenseTable.id, expenseId))

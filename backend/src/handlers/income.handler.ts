@@ -23,10 +23,11 @@ export const createIncome = async (
     .values({
       userId,
       title,
-      amount,
+      // Convert to string for decimal column
+      amount: amount.toString(),
       category,
       date: date ? new Date(date) : new Date(),
-      description,
+      description: description || "",
     })
     .returning();
 
@@ -70,10 +71,13 @@ export const updateIncome = async (
     .update(schema.incomeTable)
     .set({
       title: updateData.title || income.title,
-      amount: updateData.amount || income.amount,
+      // Convert to string for decimal column
+      amount: updateData.amount
+        ? updateData.amount.toString()
+        : income.amount.toString(),
       category: updateData.category || income.category,
       date: updateData.date ? new Date(updateData.date) : income.date,
-      description: updateData.description || income.description,
+      description: updateData.description ?? income.description,
       updatedAt: new Date(),
     })
     .where(eq(schema.incomeTable.id, incomeId))

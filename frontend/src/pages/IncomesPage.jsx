@@ -5,7 +5,6 @@ import Pagination from "../components/Pagination";
 import LoadingSpinner from "../components/LoadingSpinner";
 import usePagination from "../hooks/usePagination";
 import notify from "../utils/toast";
-import MobileActionBar from "../components/MobileActionBar";
 import { formatDate } from "../utils/helpers"; // Import formatDate
 
 const IncomesPage = () => {
@@ -248,12 +247,6 @@ const IncomesPage = () => {
           </>
         )}
       </div>
-      <MobileActionBar
-        onDownloadCSV={handleDownloadCsv}
-        addLinkTo="/incomes/new"
-        addLinkText="New Income"
-        isDownloadDisabled={downloadMutation.isPending || incomes.length === 0}
-      />
     </>
   );
 };

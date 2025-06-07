@@ -24,7 +24,6 @@ import {
   Pie,
   Cell,
 } from "recharts";
-import MobileActionBar from "../components/MobileActionBar";
 import { formatDate } from "../utils/helpers"; // Import formatDate
 
 const Dashboard = () => {
@@ -450,15 +449,6 @@ const Dashboard = () => {
           )}
         </div>
       </div>
-      <MobileActionBar
-        onDownloadCSV={handleDownloadTransactionsCSV}
-        addLinkTo="/expenses/new"
-        addLinkText="New Entry"
-        isDownloadDisabled={
-          downloadTransactionsMutation.isPending ||
-          stableTransactionList.length === 0 // Use stableTransactionList here
-        }
-      />
     </>
   );
 };

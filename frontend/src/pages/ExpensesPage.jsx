@@ -5,7 +5,6 @@ import Pagination from "../components/Pagination";
 import LoadingSpinner from "../components/LoadingSpinner";
 import usePagination from "../hooks/usePagination";
 import notify from "../utils/toast";
-import MobileActionBar from "../components/MobileActionBar"; // Added for consistency
 import { processApiError } from "../utils/errorHandler"; // Added for error handling
 import { formatDate } from "../utils/helpers"; // Import formatDate
 
@@ -260,17 +259,6 @@ const ExpensesPage = () => {
           )}
         </>
       )}
-      {/* Mobile Action Bar */}
-      <MobileActionBar
-        onDownloadCSV={handleDownloadCsv}
-        isDownloadDisabled={
-          downloadCsvMutation.isPending ||
-          !expensesData ||
-          expensesData.length === 0
-        }
-        addLinkTo="/expenses/new"
-        addLinkText="New Expense"
-      />
     </div>
   );
 };

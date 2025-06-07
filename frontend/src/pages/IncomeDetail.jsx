@@ -1,56 +1,69 @@
-import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { incomeService } from "../services/api";
+import toast from "react-hot-toast";
+import LoadingSpinner from "../components/LoadingSpinner";
+import { processApiError } from "../utils/errorHandler";
 
 const IncomeDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [income, setIncome] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const fetchIncome = async () => {
-      try {
-        setLoading(true);
-        const response = await incomeService.getById(id);
-        // Handle nested data structure - direct access or through income property
-        setIncome(response.data?.income || response.data);
-      } catch (err) {
-        setError("Failed to load income details");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const {
+    data: income,
+    isLoading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: ["income", id],
+    queryFn: async () => {
+      const response = await incomeService.getById(id);
+      return response.data?.income || response.data;
+    },
+    enabled: !!id,
+  });
 
-    fetchIncome();
-  }, [id]);
+  const deleteMutation = useMutation({
+    mutationFn: incomeService.delete,
+    onSuccess: () => {
+      toast.success("Income deleted successfully!");
+      queryClient.invalidateQueries(["incomes"]);
+      queryClient.invalidateQueries(["dashboardData"]);
+      navigate("/incomes");
+    },
+    onError: (err) => {
+      const errorResult = processApiError(err, {
+        defaultMessage: "Failed to delete income",
+      });
+      toast.error(errorResult.message);
+    },
+  });
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (window.confirm("Are you sure you want to delete this income?")) {
-      try {
-        await incomeService.delete(id);
-        navigate("/dashboard");
-      } catch (err) {
-        setError("Failed to delete income");
-        console.error(err);
-      }
+      deleteMutation.mutate(id);
     }
   };
-  if (loading)
+
+  if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-green-500"></div>
+        <LoadingSpinner size="large" message="Loading income details..." />
       </div>
     );
+  }
 
-  if (error)
+  if (isError) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-md">
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded shadow-md">
-          <p className="font-bold">Error</p>
-          <p>{error}</p>
+          <p className="font-bold">Error Loading Income</p>
+          <p>
+            {queryError?.response?.data?.message ||
+              queryError?.message ||
+              "Failed to load income details."}
+          </p>
           <button
             onClick={() => navigate(-1)}
             className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
@@ -60,8 +73,9 @@ const IncomeDetail = () => {
         </div>
       </div>
     );
+  }
 
-  if (!income)
+  if (!income) {
     return (
       <div className="container mx-auto px-4 py-8 max-w-md">
         <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded shadow-md">
@@ -76,6 +90,8 @@ const IncomeDetail = () => {
         </div>
       </div>
     );
+  }
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
       <div className="bg-white shadow-lg rounded-lg overflow-hidden">
@@ -121,25 +137,29 @@ const IncomeDetail = () => {
           <div className="flex flex-wrap gap-3 mt-8">
             <button
               onClick={() => navigate(`/incomes/edit/${id}`)}
-              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors text-sm sm:text-base"
+              disabled={deleteMutation.isPending}
             >
               Edit
             </button>
             <button
               onClick={handleDelete}
-              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+              className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors text-sm sm:text-base disabled:opacity-50"
+              disabled={deleteMutation.isPending}
             >
-              Delete
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
             </button>
             <button
               onClick={() => navigate(-1)}
-              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors"
+              className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors text-sm sm:text-base"
+              disabled={deleteMutation.isPending}
             >
               Back
             </button>
             <button
               onClick={() => navigate("/dashboard")}
-              className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
+              className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors text-sm sm:text-base"
+              disabled={deleteMutation.isPending}
             >
               Dashboard
             </button>

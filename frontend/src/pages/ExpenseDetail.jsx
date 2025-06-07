@@ -1,56 +1,65 @@
-import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { expenseService } from "../services/api";
+import LoadingSpinner from "../components/LoadingSpinner"; // Added for consistency
+import notify from "../utils/toast"; // Added for notifications
 
 const ExpenseDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [expense, setExpense] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    const fetchExpense = async () => {
-      try {
-        setLoading(true);
-        const response = await expenseService.getById(id);
-        // Handle nested data structure - direct access or through expense property
-        setExpense(response.data?.expense || response.data);
-      } catch (err) {
-        setError("Failed to load expense details");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  const {
+    data: expense,
+    isLoading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: ["expense", id],
+    queryFn: async () => {
+      const response = await expenseService.getById(id);
+      return response.data?.expense || response.data;
+    },
+    enabled: !!id, // Only run query if id is available
+  });
 
-    fetchExpense();
-  }, [id]);
+  const deleteMutation = useMutation({
+    mutationFn: expenseService.delete,
+    onSuccess: () => {
+      notify.success("Expense deleted successfully");
+      queryClient.invalidateQueries(["expenses"]); // Invalidate list to refetch
+      queryClient.invalidateQueries(["dashboardData"]); // Invalidate dashboard data
+      navigate("/expenses"); // Navigate to expenses list or dashboard
+    },
+    onError: (error) => {
+      notify.error(error.response?.data?.message || "Failed to delete expense");
+      console.error(error);
+    },
+  });
 
-  const handleDelete = async () => {
+  const handleDelete = () => {
     if (window.confirm("Are you sure you want to delete this expense?")) {
-      try {
-        await expenseService.delete(id);
-        navigate("/dashboard");
-      } catch (err) {
-        setError("Failed to delete expense");
-        console.error(err);
-      }
+      deleteMutation.mutate(id);
     }
   };
-  if (loading)
+
+  if (isLoading)
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-500"></div>
+        <LoadingSpinner size="large" message="Loading expense details..." />
       </div>
     );
 
-  if (error)
+  if (isError)
     return (
       <div className="container mx-auto px-4 py-8 max-w-md">
         <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded shadow-md">
           <p className="font-bold">Error</p>
-          <p>{error}</p>
+          <p>
+            {queryError?.response?.data?.message ||
+              queryError?.message ||
+              "Failed to load expense details"}
+          </p>
           <button
             onClick={() => navigate(-1)}
             className="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition-colors"
@@ -61,7 +70,8 @@ const ExpenseDetail = () => {
       </div>
     );
 
-  if (!expense)
+  if (!expense && !isLoading)
+    // Added !isLoading to prevent flash of "Not Found"
     return (
       <div className="container mx-auto px-4 py-8 max-w-md">
         <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 rounded shadow-md">
@@ -76,6 +86,7 @@ const ExpenseDetail = () => {
         </div>
       </div>
     );
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-2xl">
       <div className="bg-white shadow-lg rounded-lg overflow-hidden">
@@ -122,14 +133,16 @@ const ExpenseDetail = () => {
             <button
               onClick={() => navigate(`/expenses/edit/${id}`)}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+              disabled={deleteMutation.isPending}
             >
               Edit
             </button>
             <button
               onClick={handleDelete}
               className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+              disabled={deleteMutation.isPending}
             >
-              Delete
+              {deleteMutation.isPending ? "Deleting..." : "Delete"}
             </button>
             <button
               onClick={() => navigate(-1)}

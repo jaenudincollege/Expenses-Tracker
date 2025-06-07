@@ -1,15 +1,55 @@
-import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { expenseService } from "../services/api";
 import Pagination from "../components/Pagination";
 import LoadingSpinner from "../components/LoadingSpinner";
 import usePagination from "../hooks/usePagination";
 import notify from "../utils/toast";
+import MobileActionBar from "../components/MobileActionBar"; // Added for consistency
+import { processApiError } from "../utils/errorHandler"; // Added for error handling
 
 const ExpensesPage = () => {
-  const [expenses, setExpenses] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const {
+    data: expensesData,
+    isLoading: isLoadingExpenses,
+    isError: isLoadError,
+    error: loadError,
+  } = useQuery({
+    queryKey: ["expenses"],
+    queryFn: async () => {
+      const response = await expenseService.getAll();
+      return response.data?.expenses || response.data || [];
+    },
+    placeholderData: [], // Keep previous data while loading new data
+  });
+
+  const downloadCsvMutation = useMutation({
+    mutationFn: expenseService.downloadCSV,
+    onMutate: () => {
+      return notify.loading("Preparing expenses CSV download...");
+    },
+    onSuccess: (data, variables, context) => {
+      notify.dismiss(context);
+      notify.success("Expenses CSV downloaded successfully");
+      // Download is handled by the browser
+    },
+    onError: (error, variables, context) => {
+      notify.dismiss(context);
+      const errorResult = processApiError(error, {
+        defaultMessage: "Failed to download expenses CSV",
+      });
+      notify.error(errorResult.message);
+      console.error(error);
+    },
+  });
+
+  const handleDownloadCsv = () => {
+    if (expensesData && expensesData.length > 0) {
+      downloadCsvMutation.mutate();
+    } else {
+      notify.info("No expenses to download.");
+    }
+  };
 
   // Use pagination hook for expenses
   const {
@@ -17,66 +57,46 @@ const ExpensesPage = () => {
     currentPage: expensesCurrentPage,
     totalPages: expensesTotalPages,
     handlePageChange: handleExpensesPageChange,
-  } = usePagination(expenses || [], 10);
+  } = usePagination(expensesData || [], 10); // Use expensesData from useQuery
 
-  useEffect(() => {
-    const fetchExpenses = async () => {
-      try {
-        setLoading(true);
-        const response = await expenseService.getAll();
-        setExpenses(response.data?.expenses || response.data);
-      } catch (err) {
-        setError("Failed to load expenses");
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchExpenses();
-  }, []);
-  const handleDownloadCsv = async () => {
-    try {
-      setLoading(true);
-      const loadingToastId = notify.loading(
-        "Preparing expenses CSV download..."
-      );
-      await expenseService.downloadCSV();
-      notify.dismiss(loadingToastId);
-      notify.success("Expenses CSV downloaded successfully");
-      // The download will be handled by the browser automatically
-    } catch (err) {
-      setError("Failed to download expenses CSV");
-      notify.error("Failed to download expenses CSV");
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading)
+  if (isLoadingExpenses) {
     return (
       <div className="min-h-full flex items-center justify-center">
         <LoadingSpinner size="large" message="Loading expense data..." />
       </div>
     );
+  }
 
-  if (error)
+  if (isLoadError) {
     return (
-      <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded">
-        <p>{error}</p>
+      <div className="container mx-auto px-4 py-8">
+        <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded shadow-md">
+          <p className="font-bold">Error Loading Expenses</p>
+          <p>
+            {loadError?.response?.data?.message ||
+              loadError?.message ||
+              "Failed to load expenses."}
+          </p>
+        </div>
       </div>
     );
+  }
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-6">
+    <div className="pb-16 sm:pb-0">
+      {" "}
+      {/* Added padding for MobileActionBar */}
+      <div className="flex flex-wrap justify-between items-center mb-6 gap-4">
         <h1 className="text-2xl font-bold text-gray-800">Expense Management</h1>
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center space-x-2 gap-2 sm:gap-0">
           <button
             onClick={handleDownloadCsv}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md transition-colors flex items-center"
-            disabled={loading || expenses.length === 0}
+            className="bg-green-600 hover:bg-green-700 text-white px-3 py-2 sm:px-4 sm:py-2 rounded-md transition-colors flex items-center text-sm sm:text-base whitespace-nowrap"
+            disabled={
+              downloadCsvMutation.isPending ||
+              !expensesData ||
+              expensesData.length === 0
+            }
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -90,11 +110,11 @@ const ExpensesPage = () => {
                 clipRule="evenodd"
               />
             </svg>
-            Download CSV
+            {downloadCsvMutation.isPending ? "Downloading..." : "Download CSV"}
           </button>
           <Link
             to="/expenses/new"
-            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md transition-colors flex items-center"
+            className="bg-red-600 hover:bg-red-700 text-white px-3 py-2 sm:px-4 sm:py-2 rounded-md transition-colors flex items-center text-sm sm:text-base whitespace-nowrap"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -112,8 +132,7 @@ const ExpensesPage = () => {
           </Link>
         </div>
       </div>
-
-      {paginatedExpenses.length === 0 ? (
+      {paginatedExpenses.length === 0 && !isLoadingExpenses ? (
         <div className="bg-white shadow-md rounded-lg p-6 flex flex-col items-center justify-center text-center">
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -240,6 +259,17 @@ const ExpensesPage = () => {
           )}
         </>
       )}
+      {/* Mobile Action Bar */}
+      <MobileActionBar
+        onDownloadCSV={handleDownloadCsv}
+        isDownloadDisabled={
+          downloadCsvMutation.isPending ||
+          !expensesData ||
+          expensesData.length === 0
+        }
+        addLinkTo="/expenses/new"
+        addLinkText="New Expense"
+      />
     </div>
   );
 };

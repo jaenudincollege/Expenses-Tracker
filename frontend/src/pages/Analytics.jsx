@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { expenseService, incomeService } from "../services/api";
 import { useAuth } from "../contexts/AuthContext";
 import { formatCurrency } from "../utils/helpers";
@@ -6,134 +7,144 @@ import { processApiError } from "../utils/errorHandler";
 import LoadingSpinner from "../components/LoadingSpinner";
 
 const Analytics = () => {
-  // Use auth context to ensure protected route works but no need to extract values
   useAuth();
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [expensesData, setExpensesData] = useState([]);
-  const [incomesData, setIncomesData] = useState([]);
-  const [period, setPeriod] = useState(90); // Default to 90 days
+  const [period, setPeriod] = useState(90);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const [expensesResponse, incomesResponse] = await Promise.all([
-          expenseService.getHistory(period),
-          incomeService.getHistory(period),
-        ]);
-
-        setExpensesData(expensesResponse.data.expenses || []);
-        setIncomesData(incomesResponse.data.incomes || []);
-      } catch (err) {
-        const errorResult = processApiError(err, {
-          defaultMessage: "Failed to load analytics data",
-        });
-        setError(errorResult.message);
-      } finally {
-        setLoading(false);
-      }
+  const fetchAnalyticsData = async (period) => {
+    const [expensesResponse, incomesResponse] = await Promise.all([
+      expenseService.getHistory(period),
+      incomeService.getHistory(period),
+    ]);
+    return {
+      expenses: expensesResponse.data.expenses || [],
+      incomes: incomesResponse.data.incomes || [],
     };
+  };
 
-    fetchData();
-  }, [period]);
+  const {
+    data: analyticsData,
+    isLoading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: ["analyticsData", period],
+    queryFn: () => fetchAnalyticsData(period),
+    placeholderData: (previousData) => previousData,
+    keepPreviousData: true,
+  });
 
-  // Calculate total expenses by category
-  const expensesByCategory = expensesData.reduce((acc, expense) => {
-    const category = expense.category || "Uncategorized";
-    if (!acc[category]) {
-      acc[category] = 0;
+  const expensesData = useMemo(
+    () => analyticsData?.expenses || [],
+    [analyticsData]
+  );
+  const incomesData = useMemo(
+    () => analyticsData?.incomes || [],
+    [analyticsData]
+  );
+
+  const apiError = useMemo(() => {
+    if (queryError) {
+      const errorResult = processApiError(queryError, {
+        defaultMessage: "Failed to load analytics data",
+      });
+      return errorResult.message;
     }
-    acc[category] += parseFloat(expense.amount);
-    return acc;
-  }, {});
+    return null;
+  }, [queryError]);
 
-  // Calculate total income by category
-  const incomesByCategory = incomesData.reduce((acc, income) => {
-    const category = income.category || "Uncategorized";
-    if (!acc[category]) {
-      acc[category] = 0;
-    }
-    acc[category] += parseFloat(income.amount);
-    return acc;
-  }, {});
+  const expensesByCategory = useMemo(() => {
+    return expensesData.reduce((acc, expense) => {
+      const category = expense.category || "Uncategorized";
+      if (!acc[category]) {
+        acc[category] = 0;
+      }
+      acc[category] += parseFloat(expense.amount);
+      return acc;
+    }, {});
+  }, [expensesData]);
 
-  // Calculate monthly totals for the selected period
-  const getMonthlyData = () => {
+  const incomesByCategory = useMemo(() => {
+    return incomesData.reduce((acc, income) => {
+      const category = income.category || "Uncategorized";
+      if (!acc[category]) {
+        acc[category] = 0;
+      }
+      acc[category] += parseFloat(income.amount);
+      return acc;
+    }, {});
+  }, [incomesData]);
+
+  const monthlyData = useMemo(() => {
     const months = {};
     const now = new Date();
-
-    // Get the starting date based on the selected period
     const startDate = new Date();
     startDate.setDate(now.getDate() - period);
 
-    // Initialize months object with all months in the period
     for (let d = new Date(startDate); d <= now; d.setMonth(d.getMonth() + 1)) {
       const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
         2,
         "0"
       )}`;
-      months[monthKey] = {
-        expenses: 0,
-        incomes: 0,
-        savings: 0,
-      };
+      months[monthKey] = { expenses: 0, incomes: 0, savings: 0 };
     }
 
-    // Add expenses data
     expensesData.forEach((expense) => {
       const date = new Date(expense.date);
       const monthKey = `${date.getFullYear()}-${String(
         date.getMonth() + 1
       ).padStart(2, "0")}`;
-
       if (months[monthKey]) {
         months[monthKey].expenses += parseFloat(expense.amount);
       }
     });
 
-    // Add incomes data
     incomesData.forEach((income) => {
       const date = new Date(income.date);
       const monthKey = `${date.getFullYear()}-${String(
         date.getMonth() + 1
       ).padStart(2, "0")}`;
-
       if (months[monthKey]) {
         months[monthKey].incomes += parseFloat(income.amount);
       }
     });
 
-    // Calculate savings
     Object.keys(months).forEach((month) => {
       months[month].savings = months[month].incomes - months[month].expenses;
     });
 
-    return Object.entries(months).map(([month, data]) => ({
-      month,
-      ...data,
-    }));
-  };
+    return Object.entries(months).map(([month, data]) => ({ month, ...data }));
+  }, [expensesData, incomesData, period]);
 
-  const monthlyData = getMonthlyData();
-
-  // Calculate some overall statistics
-  const totalExpenses = expensesData.reduce(
-    (sum, expense) => sum + parseFloat(expense.amount),
-    0
+  const totalExpenses = useMemo(
+    () =>
+      expensesData.reduce(
+        (sum, expense) => sum + parseFloat(expense.amount),
+        0
+      ),
+    [expensesData]
   );
-  const totalIncome = incomesData.reduce(
-    (sum, income) => sum + parseFloat(income.amount),
-    0
-  );
-  const savingsRate =
-    totalIncome > 0 ? ((totalIncome - totalExpenses) / totalIncome) * 100 : 0;
 
-  // Get top expenses
-  const topExpenses = [...expensesData]
-    .sort((a, b) => parseFloat(b.amount) - parseFloat(a.amount))
-    .slice(0, 5);
-  if (loading) {
+  const totalIncome = useMemo(
+    () =>
+      incomesData.reduce((sum, income) => sum + parseFloat(income.amount), 0),
+    [incomesData]
+  );
+
+  const savingsRate = useMemo(
+    () =>
+      totalIncome > 0 ? ((totalIncome - totalExpenses) / totalIncome) * 100 : 0,
+    [totalIncome, totalExpenses]
+  );
+
+  const topExpenses = useMemo(
+    () =>
+      [...expensesData]
+        .sort((a, b) => parseFloat(b.amount) - parseFloat(a.amount))
+        .slice(0, 5),
+    [expensesData]
+  );
+
+  if (isLoading && !analyticsData) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <LoadingSpinner
@@ -154,17 +165,15 @@ const Analytics = () => {
           Analyze your financial data and trends
         </p>
       </header>
-      {error && (
+      {isError && (
         <div
           className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6"
           role="alert"
         >
-          <p>{error}</p>
+          <p>{apiError}</p>
         </div>
-      )}{" "}
-      {/* Time Period Selector */}
+      )}
       <div className="bg-white shadow-md rounded-lg p-6 mb-8">
-        {" "}
         <h2 className="text-xl font-semibold text-gray-800 mb-4">
           Select Time Period
         </h2>
@@ -188,7 +197,7 @@ const Analytics = () => {
             onClick={() => setPeriod(90)}
           >
             Last 90 Days
-          </button>{" "}
+          </button>
           <button
             className={`px-3 py-2 rounded-md text-sm sm:text-base sm:px-4 ${
               period === 180
@@ -211,7 +220,6 @@ const Analytics = () => {
           </button>
         </div>
       </div>
-      {/* Key Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-white shadow-md rounded-lg p-6">
           <h2 className="text-lg font-semibold text-gray-700 mb-2">
@@ -243,7 +251,6 @@ const Analytics = () => {
           <p className="text-gray-500 text-sm mt-2">Income saved</p>
         </div>
       </div>
-      {/* Monthly Trends */}
       <div className="bg-white shadow-md rounded-lg p-6 mb-8">
         <h2 className="text-xl font-semibold text-gray-800 mb-6">
           Monthly Trends
@@ -345,7 +352,6 @@ const Analytics = () => {
         </div>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-        {/* Expense Categories */}
         <div className="bg-white shadow-md rounded-lg p-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-6">
             Expense Breakdown
@@ -379,7 +385,6 @@ const Analytics = () => {
           </ul>
         </div>
 
-        {/* Income Categories */}
         <div className="bg-white shadow-md rounded-lg p-6">
           <h2 className="text-xl font-semibold text-gray-800 mb-6">
             Income Breakdown
@@ -413,7 +418,6 @@ const Analytics = () => {
           </ul>
         </div>
       </div>
-      {/* Top Expenses */}
       <div className="bg-white shadow-md rounded-lg p-6">
         <h2 className="text-xl font-semibold text-gray-800 mb-6">
           Top Expenses

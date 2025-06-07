@@ -20,10 +20,10 @@ export type Transaction = {
   userId: number;
   type: "income" | "expense";
   title: string;
-  amount: number;
+  amount: string | number; // Support both string and number for decimal values
   category: string;
   date: Date;
-  description: string;
+  description: string | null; // Allow null for description since it's nullable in the schema
   createdAt?: Date | null;
   updatedAt?: Date | null;
 };
@@ -39,10 +39,10 @@ export type UserProfile = {
 export type ExportRecord = {
   id: number;
   title: string;
-  amount: number;
+  amount: string | number; // Support both string and number for decimal values
   category: string;
   date: string;
-  description: string;
+  description: string | null; // Allow null for description to match schema
   createdAt: string;
   updatedAt?: string;
   type?: "income" | "expense";

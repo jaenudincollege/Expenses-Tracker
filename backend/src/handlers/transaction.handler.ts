@@ -6,7 +6,7 @@ export const getBalance = async (userId: number) => {
   // Get total expenses
   const expenseResult = await db
     .select({
-      total: sql<number>`sum(${schema.expenseTable.amount})`,
+      total: sql<string>`sum(${schema.expenseTable.amount})`,
     })
     .from(schema.expenseTable)
     .where(eq(schema.expenseTable.userId, userId));
@@ -14,13 +14,14 @@ export const getBalance = async (userId: number) => {
   // Get total incomes
   const incomeResult = await db
     .select({
-      total: sql<number>`sum(${schema.incomeTable.amount})`,
+      total: sql<string>`sum(${schema.incomeTable.amount})`,
     })
     .from(schema.incomeTable)
     .where(eq(schema.incomeTable.userId, userId));
 
-  const totalExpense = expenseResult[0].total || 0;
-  const totalIncome = incomeResult[0].total || 0;
+  // Parse string values to numbers with fallback to 0
+  const totalExpense = parseFloat(expenseResult[0].total || '0');
+  const totalIncome = parseFloat(incomeResult[0].total || '0');
   const balance = totalIncome - totalExpense;
 
   return {
@@ -61,11 +62,15 @@ export const getMonthlyStats = async (userId: number) => {
       )
     );
 
+  // Calculate totals by parsing string amounts to numbers
   const totalExpense = expenses.reduce(
-    (sum, expense) => sum + expense.amount,
+    (sum, expense) => sum + parseFloat(expense.amount.toString()),
     0
   );
-  const totalIncome = incomes.reduce((sum, income) => sum + income.amount, 0);
+  const totalIncome = incomes.reduce(
+    (sum, income) => sum + parseFloat(income.amount.toString()),
+    0
+  );
   const monthlyBalance = totalIncome - totalExpense;
 
   // Group expenses by category
@@ -74,7 +79,7 @@ export const getMonthlyStats = async (userId: number) => {
     if (!expenseByCategory[expense.category]) {
       expenseByCategory[expense.category] = 0;
     }
-    expenseByCategory[expense.category] += expense.amount;
+    expenseByCategory[expense.category] += parseFloat(expense.amount.toString());
   });
 
   // Group incomes by category
@@ -83,7 +88,7 @@ export const getMonthlyStats = async (userId: number) => {
     if (!incomeByCategory[income.category]) {
       incomeByCategory[income.category] = 0;
     }
-    incomeByCategory[income.category] += income.amount;
+    incomeByCategory[income.category] += parseFloat(income.amount.toString());
   });
 
   return {
@@ -120,7 +125,7 @@ export const getAllTransactions = async (
     return new Date(b.date).getTime() - new Date(a.date).getTime();
   });
 
-  return transactions;
+  return transactions as Transaction[];
 };
 
 export const getRecentTransactions = async (
@@ -170,14 +175,17 @@ export const getRecentTransactions = async (
 
   // Calculate summary statistics
   const totalExpense = expenses.reduce(
-    (sum, expense) => sum + expense.amount,
+    (sum, expense) => sum + parseFloat(expense.amount.toString()),
     0
   );
-  const totalIncome = incomes.reduce((sum, income) => sum + income.amount, 0);
+  const totalIncome = incomes.reduce(
+    (sum, income) => sum + parseFloat(income.amount.toString()),
+    0
+  );
   const balance = totalIncome - totalExpense;
 
   return {
-    transactions,
+    transactions: transactions as Transaction[],
     summary: {
       totalExpense,
       totalIncome,
@@ -191,14 +199,15 @@ export const formatTransactionsForExport = (
   transactions: Transaction[]
 ): ExportRecord[] => {
   return transactions.map((transaction) => {
-    // Create a new object with just the fields we need
-    const formattedTransaction: ExportRecord = {
+    // Create a base object without the transaction properties
+    const base = {
       id: transaction.id,
-      type: transaction.type,
       title: transaction.title,
       amount: transaction.amount,
       category: transaction.category,
+      type: transaction.type,
       description: transaction.description,
+      // Format dates as ISO strings
       date: transaction.date
         ? new Date(transaction.date).toISOString().split("T")[0]
         : "",
@@ -206,8 +215,10 @@ export const formatTransactionsForExport = (
         ? new Date(transaction.createdAt).toISOString()
         : "",
     };
-
-    // Add updatedAt if it exists
+    
+    // Only add updatedAt if it exists
+    const formattedTransaction: ExportRecord = base;
+    
     if (transaction.updatedAt) {
       formattedTransaction.updatedAt = new Date(
         transaction.updatedAt

@@ -16,7 +16,12 @@ const IncomeForm = () => {
     handleSubmit,
     formState: { errors },
     reset,
-  } = useForm();
+  } = useForm({
+    defaultValues: {
+      date: new Date().toISOString().split("T")[0], // Set today's date as default
+      description: "", // Set empty string as default for description
+    },
+  });
 
   const isEditMode = !!id;
 

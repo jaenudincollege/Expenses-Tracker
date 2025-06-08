@@ -7,7 +7,7 @@ const Home = () => {
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-blue-50 to-white p-4">
       <div className="max-w-2xl mx-auto text-center">
         <h1 className="text-4xl md:text-5xl font-bold text-gray-800 mb-6">
-          Personal Finance Tracker
+          Personal Expenses Tracker
         </h1>
         <p className="text-xl text-gray-600 mb-10">
           Track your expenses and income easily!
